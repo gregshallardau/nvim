@@ -17,6 +17,10 @@ function M.parse_file(lines)
     local component = line:match("(%u%w+)::make%s*%(")
     if component then
       current_component = component
+      -- Count ::make() occurrences for container-scope frequency
+      if not result[current_component] then result[current_component] = {} end
+      if not result[current_component]["make"] then result[current_component]["make"] = {} end
+      result[current_component]["make"][""] = (result[current_component]["make"][""] or 0) + 1
     end
 
     -- Detect method call on current chain: ->methodName(args)

@@ -55,7 +55,14 @@ function M.open(ctx)
   local enriched = {}
   for _, entry in ipairs(registry_entries) do
     local key = entry.method or entry.name or ""
-    local index_data = indexer.get(component or scope, key)
+    local index_data
+    if entry.method then
+      -- Component method scope: look up frequency of this method on the component
+      index_data = indexer.get(component, key)
+    else
+      -- Container scope: look up how many times this class was instantiated (via ::make)
+      index_data = indexer.get(key, "make")
+    end
     table.insert(enriched, {
       entry      = entry,
       index_data = index_data,
@@ -102,7 +109,10 @@ function M.open(ctx)
         end
         local preview_text = inserter.build_insert_text(e, idata)
         table.insert(lines, "Will insert:")
-        table.insert(lines, preview_text)
+        local preview_lines = vim.split(preview_text, "\n", { plain = true })
+        for _, pl in ipairs(preview_lines) do
+          table.insert(lines, pl)
+        end
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
       end,
     }),

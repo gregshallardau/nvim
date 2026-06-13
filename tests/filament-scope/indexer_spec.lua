@@ -45,6 +45,17 @@ describe("filament-scope indexer", function()
       assert.same({}, result)
     end)
 
+    it("tracks ::make() occurrence count for container frequency", function()
+      local lines = {
+        "TextColumn::make('name')",
+        "    ->sortable(),",
+      }
+      local result = indexer.parse_file(lines)
+      assert.truthy(result["TextColumn"])
+      assert.truthy(result["TextColumn"]["make"])
+      assert.equal(1, result["TextColumn"]["make"][""])
+    end)
+
     it("does not attribute methods after a completed chain to the previous component", function()
       local lines = {
         "Select::make('status')",
