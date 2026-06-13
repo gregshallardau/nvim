@@ -111,4 +111,29 @@ describe("filament-scope context", function()
     assert.equal("actions", result.scope)
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
+
+  it("returns form_fields when cursor is after a completed multi-line Select chain", function()
+    local buf = make_buf({
+      "public function form(Form $form): Form",
+      "{",
+      "    return $form->schema([",
+      "        Select::make('status')",
+      "            ->label('Status')",
+      "            ->options(['active', 'inactive']),",
+      "        ",
+    })
+    local result = context.detect(buf, 7)
+    assert.equal("form_fields", result.scope)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("returns actions for ->bulkActions([", function()
+    local buf = make_buf({
+      "return $table->bulkActions([",
+      "    ",
+    })
+    local result = context.detect(buf, 2)
+    assert.equal("actions", result.scope)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
 end)

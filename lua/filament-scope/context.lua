@@ -19,7 +19,19 @@ function M.detect(bufnr, lnum)
     -- completed entry inside a container (not an open chain at cursor).
     local component = line:match("(%u%w+)::make%s*%(")
     if component and not line:match(",%s*$") then
-      return { scope = "component", component = component }
+      -- Check forward from ::make line to cursor for chain terminator
+      local chain_terminated = false
+      for j = i + 1, #lines do
+        local fwd = lines[j]
+        -- A trailing comma or closing paren/bracket ends the chain
+        if fwd:match(",%s*$") or fwd:match("[%)%]];%s*$") then
+          chain_terminated = true
+          break
+        end
+      end
+      if not chain_terminated then
+        return { scope = "component", component = component }
+      end
     end
 
     -- ->columns([
