@@ -39,8 +39,8 @@ function M.parse_file(lines)
         tbl[args] = (tbl[args] or 0) + 1
       end
 
-      -- End of chain: line ends with ; and no further -> on this line
-      if line:match(";") and not line:match("^%s*%->") then
+      -- End of chain: any line ending with ; terminates the statement
+      if line:match(";%s*$") then
         current_component = nil
       end
     end
@@ -136,7 +136,7 @@ function M.run_async(project_root)
   if vim.fn.isdirectory(filament_dir) == 0 then return end
 
   vim.system(
-    { "rg", "--type", "php", "-l", "", filament_dir },
+    { "rg", "--type", "php", "--files", filament_dir },
     { text = true },
     function(result)
       if result.code ~= 0 or not result.stdout then return end

@@ -44,6 +44,24 @@ describe("filament-scope indexer", function()
       local result = indexer.parse_file(lines)
       assert.same({}, result)
     end)
+
+    it("does not attribute methods after a completed chain to the previous component", function()
+      local lines = {
+        "Select::make('status')",
+        "    ->multiple()",
+        "    ->badge(false);",
+        "$form->schema([",
+        "    TextInput::make('name')",
+        "        ->required(),",
+        "])",
+      }
+      local result = indexer.parse_file(lines)
+      -- schema should NOT be attributed to Select
+      assert.falsy(result["Select"] and result["Select"]["schema"])
+      -- TextInput should be parsed correctly
+      assert.truthy(result["TextInput"])
+      assert.truthy(result["TextInput"]["required"])
+    end)
   end)
 
   describe("compute_top_arg", function()
@@ -75,6 +93,10 @@ describe("filament-scope indexer", function()
   end)
 
   describe("get", function()
+    before_each(function()
+      indexer._cache = {}
+    end)
+
     it("returns zero count entry for unknown component/method", function()
       indexer._cache = {}
       local result = indexer.get("Select", "badge")
