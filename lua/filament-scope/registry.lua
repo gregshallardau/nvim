@@ -55,7 +55,7 @@ M.containers = {
     { name = "SelectFilter",  snippet = "SelectFilter::make('${1:field}')\n    ->options(${2:})", desc = "Select-based filter" },
     { name = "TernaryFilter", snippet = "TernaryFilter::make('${1:field}')",                      desc = "True / false / null filter" },
     { name = "Filter",        snippet = "Filter::make('${1:name}')\n    ->form([\n        ${2:}\n    ])\n    ->query(fn (Builder \\$query, array \\$data) => \\$query)", desc = "Custom filter with form" },
-    { name = "QueryBuilder",  snippet = "QueryBuilder::make()\n    ->constraints([\n        ${2:}\n    ])", desc = "Advanced query builder" },
+    { name = "QueryBuilder",  snippet = "QueryBuilder::make()\n    ->constraints([\n        ${1:}\n    ])", desc = "Advanced query builder" },
   },
   actions = {
     { name = "CreateAction",      snippet = "CreateAction::make()",       desc = "Create record" },
@@ -73,7 +73,8 @@ M.containers = {
 
 -- Component method scopes: what to chain on SomeClass::make(...)->
 -- Each entry: { method, args (snippet for args portion), complex, desc }
--- args = "" means no args. args string is everything including parens.
+-- args = "" means no args; inserter must append "()" to produce ->method().
+-- args string is everything including parens when non-empty.
 M.methods = {
   common = {
     { method = "label",         args = "('${1:Label}')",      complex = false, desc = "Display label" },
@@ -149,8 +150,8 @@ M.methods = {
     { method = "native",            args = "(false)",            complex = false, desc = "Use custom picker UI" },
     { method = "displayFormat",     args = "('${1:d/m/Y}')",     complex = false, desc = "Display date format" },
     { method = "format",            args = "('${1:Y-m-d}')",     complex = false, desc = "Storage format" },
-    { method = "minDate",           args = "(now())",            complex = false, desc = "Minimum selectable date" },
-    { method = "maxDate",           args = "(now())",            complex = false, desc = "Maximum selectable date" },
+    { method = "minDate",           args = "(${1:now()})",        complex = false, desc = "Minimum selectable date" },
+    { method = "maxDate",           args = "(${1:now()})",        complex = false, desc = "Maximum selectable date" },
     { method = "weekStartsOnMonday", args = "",                  complex = false, desc = "Start week on Monday" },
   },
   FileUpload = {
