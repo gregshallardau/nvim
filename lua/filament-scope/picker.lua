@@ -18,13 +18,14 @@ end
 -- Open the Filament scope picker.
 -- ctx: { scope: string, component: string|nil }
 function M.open(ctx)
-  local ok_telescope, pickers   = pcall(require, "telescope.pickers")
-  local ok_finders,  finders    = pcall(require, "telescope.finders")
-  local ok_conf,     conf_mod   = pcall(require, "telescope.config")
-  local ok_actions,  actions    = pcall(require, "telescope.actions")
+  local ok_telescope, pickers    = pcall(require, "telescope.pickers")
+  local ok_finders,  finders     = pcall(require, "telescope.finders")
+  local ok_conf,     conf_mod    = pcall(require, "telescope.config")
+  local ok_actions,  actions     = pcall(require, "telescope.actions")
   local ok_state,    action_state = pcall(require, "telescope.actions.state")
+  local ok_prev,     previewers  = pcall(require, "telescope.previewers")
 
-  if not (ok_telescope and ok_finders and ok_conf and ok_actions and ok_state) then
+  if not (ok_telescope and ok_finders and ok_conf and ok_actions and ok_state and ok_prev) then
     vim.notify("filament-scope: Telescope not available", vim.log.levels.ERROR)
     return
   end
@@ -82,7 +83,7 @@ function M.open(ctx)
       end,
     }),
     sorter = conf.generic_sorter({}),
-    previewer = require("telescope.previewers").new_buffer_previewer({
+    previewer = previewers.new_buffer_previewer({
       title = "Details",
       define_preview = function(self, entry)
         local e    = entry.value.entry
@@ -99,8 +100,7 @@ function M.open(ctx)
           end
           table.insert(lines, "")
         end
-        local inserter_mod = require("filament-scope.inserter")
-        local preview_text = inserter_mod.build_insert_text(e, idata)
+        local preview_text = inserter.build_insert_text(e, idata)
         table.insert(lines, "Will insert:")
         table.insert(lines, preview_text)
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
