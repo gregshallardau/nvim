@@ -75,7 +75,7 @@ function M.setup(opts)
 
   -- :FilamentIndexStatus — show last index stats
   vim.api.nvim_create_user_command("FilamentIndexStatus", function()
-    local cache = indexer._cache
+    local cache = indexer._cache or {}
     local component_count = 0
     local method_count = 0
     for _, methods in pairs(cache) do
