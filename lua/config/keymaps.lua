@@ -13,6 +13,7 @@ end
 
 map("n", "<leader>w", "<cmd>w<cr>", { desc = "Write" })
 map("n", "<leader>q", "<cmd>q<cr>", { desc = "Quit" })
+map("n", "<leader>H", function() Snacks.dashboard() end, { desc = "Home dashboard" })
 
 map("n", "<leader>ff", function() require("telescope.builtin").find_files() end, { desc = "Find files" })
 map("n", "<leader>fg", function() require("telescope.builtin").live_grep() end, { desc = "Live grep" })
