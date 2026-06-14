@@ -112,14 +112,18 @@ local function merge_raw(global_raw, file_raw)
 end
 
 -- Write the cache to .nvim/filament-index.json in project_root.
+-- Deferred via vim.schedule because vim.fn.* cannot be called from fast event contexts
+-- (e.g. vim.uv callbacks).
 local function write_cache(project_root, cache)
-  local dir = project_root .. "/.nvim"
-  vim.fn.mkdir(dir, "p")
-  local path = dir .. "/filament-index.json"
-  local ok, encoded = pcall(vim.fn.json_encode, cache)
-  if not ok then return end
-  local f = io.open(path, "w")
-  if f then f:write(encoded); f:close() end
+  vim.schedule(function()
+    local dir = project_root .. "/.nvim"
+    vim.fn.mkdir(dir, "p")
+    local path = dir .. "/filament-index.json"
+    local ok, encoded = pcall(vim.fn.json_encode, cache)
+    if not ok then return end
+    local f = io.open(path, "w")
+    if f then f:write(encoded); f:close() end
+  end)
 end
 
 -- Load existing cache from .nvim/filament-index.json.
