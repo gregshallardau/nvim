@@ -11,6 +11,9 @@ return {
         python = { "ruff_format" },
         json = { "jq" },
         yaml = { "yamlfmt" },
+        -- Disable markdown: prettier reformats table separators (|---|---|
+        -- becomes |-----------|) which breaks md-doc's [[field]] table rows.
+        markdown = {},
       },
     },
   },
