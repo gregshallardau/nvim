@@ -5,8 +5,8 @@ return {
   config = function()
     require("nvim-surround").setup({
       surrounds = {
-        -- b = markdown bold: **text**
-        ["b"] = {
+        -- * = markdown bold: **text**
+        ["*"] = {
           add = { "**", "**" },
           find = "%*%*.-[^%*]%*%*",
           delete = "^(%*%*)().-([^%*]%*%*)()$",
