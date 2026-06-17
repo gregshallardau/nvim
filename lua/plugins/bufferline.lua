@@ -6,6 +6,8 @@ return {
     "akinsho/bufferline.nvim",
     opts = {
       options = {
+        max_name_length   = 60,  -- allow long paths before bufferline clips them
+        tab_size          = 20,  -- minimum tab width
         name_formatter = function(buf)
           if not buf.path or not buf.path:match("%.md$") then
             return nil  -- use bufferline's default for non-markdown files
@@ -14,9 +16,9 @@ return {
           for part in buf.path:gmatch("[^/]+") do
             table.insert(parts, part)
           end
-          -- Show up to 3 trailing path components so you can see
-          -- client / document-type / filename without truncation.
-          local n = math.min(3, #parts)
+          -- Show up to 4 trailing path components:
+          -- e.g. clients/company-x/templates/policy-documents.md
+          local n = math.min(4, #parts)
           local out = {}
           for i = #parts - n + 1, #parts do
             table.insert(out, parts[i])
