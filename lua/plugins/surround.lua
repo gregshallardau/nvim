@@ -4,6 +4,9 @@ return {
   event = "VeryLazy",
   config = function()
     require("nvim-surround").setup({
+      keymaps = {
+        visual = "gS",
+      },
       surrounds = {
         -- * = markdown bold: **text**
         ["*"] = {
