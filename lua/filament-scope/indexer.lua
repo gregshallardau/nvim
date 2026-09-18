@@ -1,10 +1,12 @@
+local Store = require("project-intel.store")
+
 local M = {}
 
-M._cache = {}     -- { Component = { method = { top_arg, count } } }
-M._raw = {}       -- { Component = { method = { arg_string = count } } }
+M._cache = {}
+M._raw = {}
+M._store = nil
+M._root = nil
 
--- Parse an array of PHP source lines and return raw frequency table.
--- Returns: { ComponentName = { methodName = { arg_string = count } } }
 function M.parse_file(lines)
   local result = {}
   local current_component = nil
@@ -13,37 +15,27 @@ function M.parse_file(lines)
   while i <= #lines do
     local line = lines[i]
 
-    -- Detect component start: UpperCaseClass::make(
     local component = line:match("(%u%w+)::make%s*%(")
     if component then
       current_component = component
-      -- Count ::make() occurrences for container-scope frequency
       if not result[current_component] then result[current_component] = {} end
       if not result[current_component]["make"] then result[current_component]["make"] = {} end
       result[current_component]["make"][""] = (result[current_component]["make"][""] or 0) + 1
     end
 
-    -- Detect method call on current chain: ->methodName(args)
     if current_component then
-      -- Capture everything after the opening paren (greedy), then strip the
-      -- outer closing paren plus any trailing , or ; to handle nested parens
-      -- like ->options(Helper::GetFoo()),
       local method, rest = line:match("%->(%w+)%s*%((.*)$")
       if method then
         local stripped = (rest or ""):gsub("[,;%s]*$", ""):gsub("%)$", "")
-        -- Normalise args: trim whitespace
         local args = stripped:gsub("^%s*(.-)%s*$", "%1")
-        if not result[current_component] then
-          result[current_component] = {}
-        end
-        if not result[current_component][method] then
-          result[current_component][method] = {}
-        end
+
+        if not result[current_component] then result[current_component] = {} end
+        if not result[current_component][method] then result[current_component][method] = {} end
+
         local tbl = result[current_component][method]
         tbl[args] = (tbl[args] or 0) + 1
       end
 
-      -- End of chain: any line ending with ; terminates the statement
       if line:match(";%s*$") then
         current_component = nil
       end
@@ -55,8 +47,6 @@ function M.parse_file(lines)
   return result
 end
 
--- Given a table of { arg_string = count }, return the dominant arg (>50% share)
--- or "" if none dominates. Also returns the count of the top arg.
 function M.compute_top_arg(arg_counts)
   local total = 0
   local top_arg, top_count = "", 0
@@ -76,111 +66,191 @@ function M.compute_top_arg(arg_counts)
   return "", top_count
 end
 
--- Return cached frequency data for a component/method pair.
--- Returns: { top_arg: string, count: number }
+local function merge_raw(global_raw, file_raw)
+  for component, methods in pairs(file_raw or {}) do
+    if not global_raw[component] then global_raw[component] = {} end
+
+    for method, arg_counts in pairs(methods) do
+      if not global_raw[component][method] then
+        global_raw[component][method] = {}
+      end
+
+      for arg, count in pairs(arg_counts) do
+        local target = global_raw[component][method]
+        target[arg] = (target[arg] or 0) + count
+      end
+    end
+  end
+end
+
+local function build_cache(raw)
+  local cache = {}
+
+  for component, methods in pairs(raw) do
+    cache[component] = {}
+
+    for method, arg_counts in pairs(methods) do
+      local top_arg, count = M.compute_top_arg(arg_counts)
+      cache[component][method] = {
+        top_arg = top_arg,
+        count = count,
+      }
+    end
+  end
+
+  return cache
+end
+
+function M.build_view(files)
+  local raw = {}
+
+  for _, record in pairs(files or {}) do
+    merge_raw(raw, record.data)
+  end
+
+  return {
+    raw = raw,
+    cache = build_cache(raw),
+  }
+end
+
+local function parse_path(path)
+  local f = io.open(path, "r")
+  if not f then return nil, "unable to read " .. path end
+
+  local content = f:read("*a")
+  f:close()
+
+  return M.parse_file(vim.split(content, "\n", { plain = true }))
+end
+
+local function sync_public_state()
+  if not M._store then
+    M._raw = {}
+    M._cache = {}
+    return
+  end
+
+  local view = M._store:get_view() or {}
+  M._raw = view.raw or {}
+  M._cache = view.cache or {}
+end
+
+local function ensure_store(project_root)
+  if M._store and M._root == project_root then
+    return M._store
+  end
+
+  M._root = project_root
+  M._store = Store.new({
+    id = "filament-scope",
+    version = 2,
+    cache_path = project_root .. "/.nvim/project-intel/filament-scope.json",
+    parse_path = parse_path,
+    build_view = M.build_view,
+  })
+
+  return M._store
+end
+
+local function filament_dir(project_root)
+  return project_root .. "/app/Filament"
+end
+
+local function in_filament_tree(project_root, path)
+  local prefix = filament_dir(project_root) .. "/"
+  return path:sub(1, #prefix) == prefix
+end
+
+function M.load(project_root)
+  local store = ensure_store(project_root)
+  store:load()
+  sync_public_state()
+  return store:status()
+end
+
+function M.reconcile_async(project_root, callback)
+  local store = ensure_store(project_root)
+  local dir = filament_dir(project_root)
+
+  if vim.fn.isdirectory(dir) == 0 then
+    if callback then callback({ changed = 0, removed = 0, unchanged = 0 }) end
+    return
+  end
+
+  vim.system(
+    { "rg", "--type", "php", "--files", dir },
+    { text = true },
+    function(result)
+      if result.code ~= 0 or not result.stdout then
+        if callback then
+          vim.schedule(function()
+            callback(nil, result.stderr or "rg failed")
+          end)
+        end
+        return
+      end
+
+      local paths = vim.split(result.stdout, "\n", { trimempty = true })
+
+      vim.schedule(function()
+        local stats = store:reconcile(paths)
+        sync_public_state()
+        if callback then callback(stats) end
+      end)
+    end
+  )
+end
+
+function M.update_file(project_root, path)
+  if not in_filament_tree(project_root, path) then
+    return false
+  end
+
+  local store = ensure_store(project_root)
+  local changed, err = store:update_file(path)
+  sync_public_state()
+  return changed, err
+end
+
+function M.remove_file(project_root, path)
+  local store = ensure_store(project_root)
+  local changed = store:remove_file(path)
+  sync_public_state()
+  return changed
+end
+
+function M.run_async(project_root)
+  return M.reconcile_async(project_root)
+end
+
 function M.get(component, method)
   local comp = M._cache[component]
   if not comp then return { top_arg = "", count = 0 } end
   return comp[method] or { top_arg = "", count = 0 }
 end
 
--- Build the collapsed cache from raw frequency data.
-local function build_cache(raw)
-  local cache = {}
-  for component, methods in pairs(raw) do
-    cache[component] = {}
-    for method, arg_counts in pairs(methods) do
-      local top_arg, count = M.compute_top_arg(arg_counts)
-      cache[component][method] = { top_arg = top_arg, count = count }
-    end
+function M.status()
+  if not M._store then
+    return {
+      ready = false,
+      components = 0,
+      methods = 0,
+    }
   end
-  return cache
-end
 
--- Merge raw data from one file's parse result into the global raw table.
-local function merge_raw(global_raw, file_raw)
-  for component, methods in pairs(file_raw) do
-    if not global_raw[component] then global_raw[component] = {} end
-    for method, arg_counts in pairs(methods) do
-      if not global_raw[component][method] then global_raw[component][method] = {} end
-      for arg, count in pairs(arg_counts) do
-        local tbl = global_raw[component][method]
-        tbl[arg] = (tbl[arg] or 0) + count
-      end
-    end
+  local components, methods = 0, 0
+  for _, entries in pairs(M._cache) do
+    components = components + 1
+    for _ in pairs(entries) do methods = methods + 1 end
   end
-end
 
--- Write the cache to .nvim/filament-index.json in project_root.
--- Deferred via vim.schedule because vim.fn.* cannot be called from fast event contexts
--- (e.g. vim.uv callbacks).
-local function write_cache(project_root, cache)
-  vim.schedule(function()
-    local dir = project_root .. "/.nvim"
-    vim.fn.mkdir(dir, "p")
-    local path = dir .. "/filament-index.json"
-    local ok, encoded = pcall(vim.fn.json_encode, cache)
-    if not ok then return end
-    local f = io.open(path, "w")
-    if f then f:write(encoded); f:close() end
-  end)
-end
-
--- Load existing cache from .nvim/filament-index.json.
-local function load_cache(project_root)
-  local path = project_root .. "/.nvim/filament-index.json"
-  local f = io.open(path, "r")
-  if not f then return nil end
-  local content = f:read("*a")
-  f:close()
-  local ok, decoded = pcall(vim.fn.json_decode, content)
-  if ok and type(decoded) == "table" then return decoded end
-  return nil
-end
-
--- Run a full async index of app/Filament/ under project_root.
-function M.run_async(project_root)
-  local filament_dir = project_root .. "/app/Filament"
-  if vim.fn.isdirectory(filament_dir) == 0 then return end
-
-  vim.system(
-    { "rg", "--type", "php", "--files", filament_dir },
-    { text = true },
-    function(result)
-      if result.code ~= 0 or not result.stdout then return end
-      local files = vim.split(result.stdout, "\n", { trimempty = true })
-      local global_raw = {}
-
-      local pending = #files
-      if pending == 0 then return end
-
-      for _, filepath in ipairs(files) do
-        vim.system({ "cat", filepath }, { text = true }, function(r)
-          if r.code == 0 and r.stdout then
-            local lines = vim.split(r.stdout, "\n")
-            local file_raw = M.parse_file(lines)
-            merge_raw(global_raw, file_raw)
-          end
-          pending = pending - 1
-          if pending == 0 then
-            -- All files processed — build and persist cache
-            local cache = build_cache(global_raw)
-            M._raw = global_raw
-            M._cache = cache
-            write_cache(project_root, cache)
-          end
-        end)
-      end
-    end
-  )
-end
-
--- Load the on-disk cache into memory (called on startup).
-function M.load(project_root)
-  local cached = load_cache(project_root)
-  if cached then
-    M._cache = cached
-  end
+  local status = M._store:status()
+  status.ready = true
+  status.components = components
+  status.methods = methods
+  status.project_root = M._root
+  return status
 end
 
 return M
